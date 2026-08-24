@@ -5,8 +5,12 @@ Recursively builds a citation network rooted at "Attention Is All You Need"
 Gephi. See [.claude/plan.md](.claude/plan.md) for the full design rationale,
 scale estimates, and day-by-day crawl plan.
 
-**Status**: scaffolding built and offline-tested (synthetic data only). No
-real API calls have been made yet — the crawl hasn't started.
+**Status**: the influential-only crawl is complete — frontier naturally
+exhausted, 7,199 papers / 7,224 edges, saved as `citation_network.db` /
+`citation_network_influential_only.gexf`. A second, higher-risk unrestricted
+pass ("Option B" — see Design summary below) is available via
+`--ignore-influential`, running against an isolated copy
+(`citation_network_full.db`) so the finished dataset can't be affected.
 
 ## Setup
 
@@ -107,6 +111,27 @@ Plain `python3 crawler.py` (system Python, no venv) will fail with
 - To export a GEXF snapshot manually at any time, without stopping the
   crawler: `python export_gexf.py`.
 
+### Running the unrestricted ("Option B") pass
+
+A separate, isolated run that ignores the `isInfluential` filter entirely —
+every newly-discovered citer gets queued for its own expansion, not just
+influential ones. This reopens the combinatorial-explosion risk the filter
+was added to avoid (could run for days, not ~78 minutes like the influential-
+only crawl did) — see `.claude/plan.md`'s "Future consideration" section for
+the full tradeoff writeup.
+
+It runs against `citation_network_full.db`, a separate file from
+`citation_network.db` — the finished influential-only dataset is never
+touched by this, regardless of how the unrestricted run goes:
+
+```bash
+source .env
+python crawler.py --db citation_network_full.db --gexf-output citation_network_full.gexf --ignore-influential
+```
+
+Same stop/resume/checkpoint behavior as the normal run — just pointed at the
+different DB/output files, with the flag set.
+
 ## Committing / syncing across machines
 
 The SQLite DB (`citation_network.db`) is the crawl's entire state — `git
@@ -128,8 +153,10 @@ snapshot.
 | `backfill_fields_of_study.py` | One-off: backfill `fields_of_study` for papers crawled before that field existed |
 | `INSPECTING_DB.md` | How to query/inspect the DB and log while the crawler runs |
 | `.claude/plan.md` | Full design doc: scope decisions, scale estimates, day-by-day plan |
-| `citation_network.db` | Crawl state (git-lfs tracked, not committed until it exists) |
-| `citation_network.gexf` | Latest checkpoint export (git-lfs tracked) |
+| `citation_network.db` | Finished influential-only crawl state (git-lfs tracked) |
+| `citation_network_influential_only.gexf` | Finished influential-only export (git-lfs tracked) |
+| `citation_network_full.db` | Isolated copy for the unrestricted ("Option B") pass (git-lfs tracked) |
+| `citation_network_full.gexf` | Unrestricted pass's checkpoint export, once that run produces one |
 | `logs/crawler.log` | Runtime log (gitignored) |
 
 ## Design summary
@@ -138,7 +165,12 @@ snapshot.
   expanded paper is recorded as a node/edge, but only citers whose citation
   was flagged `isInfluential` by Semantic Scholar get queued for their own
   expansion — this keeps the frontier shrinking hop over hop instead of
-  exploding combinatorially.
+  exploding combinatorially. In practice this ran to full completion (frontier
+  naturally exhausted) in ~78 minutes: 7,199 papers, 7,224 edges.
+- **`--ignore-influential` ("Option B")**: an opt-in override that queues
+  every discovered citer regardless of the flag, for a denser but much
+  riskier graph. Always run against an isolated DB copy (`--db`), never the
+  finished dataset.
 - **Cutoff**: papers published after 2026-07-31 are excluded.
 - **Time-boxed, not depth-boxed**: the crawl runs until either the frontier
   is exhausted or you stop it — there's no fixed hop-count limit.

@@ -166,28 +166,85 @@ resume mechanism across machines. Notes for the Windows side:
    Set via `.env`, picked up automatically by `api_client.py`.
 2. **Language** — Python, confirmed.
 
-## Future consideration: relaxing the influential-only filter (not yet decided)
-If the influential-only crawl reaches a natural end (frontier exhausted) in a
-reasonable timeframe, the user is considering a follow-up "risk run" that
-expands into some or all of the currently-`skipped` papers too, for a denser
-graph. Not started — purely a design note for later.
+## Follow-up: unrestricted ("Option B") pass — implemented, not yet run
+The influential-only crawl finished naturally (frontier exhausted) in ~78
+minutes: 7,199 papers, 7,224 edges, saved as `citation_network.db` /
+`citation_network_influential_only.gexf`. The user chose to pursue the
+higher-risk option (Option B, not the bounded Option A) as a follow-up.
 
-- **Isolation approach (recommended)**: once the current crawl finishes, copy
-  `citation_network.db` → `citation_network_full.db` and rename
-  `citation_network.gexf` → `citation_network_influential_only.gexf` before
-  touching anything further. Run any follow-up crawl against the copy via
-  `crawler.py --db citation_network_full.db --gexf-output
-  citation_network_full.gexf` (both flags already exist). Keeps the finished,
-  safe dataset completely untouched — no shared-column/shared-code-path risk
-  to the good result.
-- **Two different meanings of "ignore the filter", with very different risk**:
-  - *Option A — one-time re-queue*: `UPDATE papers SET status='queued' WHERE
-    status='skipped'` on the copy. Future newly-discovered papers still get
-    filtered by `isInfluential` as before. Bounded, finite extra work.
-  - *Option B — true unrestricted mode*: a new `--ignore-influential` crawler
-    flag that queues everything discovered from that point on, indefinitely.
-    This reopens the original combinatorial-explosion risk the influential
-    filter was specifically added to avoid (see "Scale reality" above) —
-    could mean days/weeks again, not hours.
-  - Leaning toward Option A as the actual "safe risk" if/when this is
-    revisited.
+Done:
+- Isolated the finished dataset: `citation_network.db` copied to
+  `citation_network_full.db` before any further changes; the original is
+  confirmed untouched (verified via `db.stats()` before/after).
+- Added `--ignore-influential` to `crawler.py`: when set, every
+  newly-discovered citer is queued for its own expansion regardless of
+  `isInfluential` (still recorded on the edge either way — only the queuing
+  decision changes). Threaded through `expand_one()` and `run()`.
+- Re-queued the 6,793 `skipped` papers in `citation_network_full.db` only
+  (`UPDATE papers SET status='queued' WHERE status='skipped'`) — without
+  this, `--ignore-influential` would have nothing queued to start from,
+  since the influential-only crawl left zero `queued` rows behind.
+
+Not done: the run itself hasn't started. Command to start it:
+```bash
+source .env
+python crawler.py --db citation_network_full.db --gexf-output citation_network_full.gexf --ignore-influential
+```
+
+Known risk, restated: this reopens the combinatorial-explosion problem the
+influential filter was added to avoid — could run for days, not ~78 minutes.
+
+## Critical bug found: root paper's citer list is only ~3.75% complete
+Discovered by the user questioning why AIAYN only had 7,120 direct citers
+found, when it's one of the most-cited ML papers ever. Confirmed via its own
+stored metadata: `citation_count = 189,845`. Both `citation_network.db` and
+`citation_network_full.db` are built starting from only the first **7,120**
+of those ~190k citers.
+
+**Root cause**: Semantic Scholar's `/paper/{id}/citations` endpoint has a
+hard server-side rule, confirmed live: `offset + limit must be < 10000` —
+you cannot page past the first ~10,000 entries via plain offset pagination,
+no matter how many citations the paper actually has. This is exactly the
+"Day 1 spike" risk flagged in the original plan (see "Known technical
+wrinkle" above) — the `OFFSET_CEILING` safeguard in `api_client.py` was built
+to stop cleanly at this limit instead of erroring, but the actual workaround
+to get past it was never implemented before the crawl was run.
+
+**Scope of the damage**: checked the log — out of 700+ papers expanded
+across both runs so far, only the root paper itself hit this ceiling. AIAYN's
+citation count is exceptional (190k); no citer found so far individually
+has anywhere near 10k citations of its own, so this is a root-specific gap,
+not (yet) a systemic one. Still possible a hub-level paper (BERT/GPT-family)
+turns up deeper in the graph and hits the same wall later.
+
+**Confirmed fix**: the endpoint supports a `publicationDateOrYear` range
+filter (tested live: `publicationDateOrYear=2017-01-01:2017-12-31` correctly
+scopes results to that year). Bucketing the root's citation fetch by date
+range — year-sized buckets, recursively split into smaller sub-ranges (e.g.
+quarters/months) for any bucket that itself would exceed ~9,000 results,
+since citation volume is not evenly distributed across AIAYN's 2017-2026
+lifetime and recent years likely exceed 10k on their own — would retrieve
+the complete ~190k citer list. Same technique should be applied defensively
+to *any* paper whose own `citationCount` metadata is large enough to risk
+hitting the ceiling, not just the root, in case a hub paper appears later.
+
+**Decision (from user)**: let both current runs (`citation_network.db`,
+finished; `citation_network_full.db`, in progress) finish as-is rather than
+stopping/discarding them. Treat them as intentionally-scoped smaller
+subgraphs, not the final answer. Implement the bucketed-pagination fix
+separately, then run a third, complete crawl afterward as the real dataset.
+Not started — implementation and the third run are both still pending.
+
+## Run 3 (queued, not started): influential-only, on the complete root list
+Confirmed with user: after `citation_network_full.db` (the currently-running
+Option B pass) finishes, do a third run that:
+- Uses the bucketed-pagination fix so the root's full ~189,845 direct citers
+  are fetched (no 10k ceiling truncation) — "no caps applied."
+- Reverts recursion to the influential-only rule (`isInfluential` gating, no
+  `--ignore-influential`) for everything past the root, same logic as the
+  original `citation_network.db` run.
+- Effectively: the correct/complete version of the original safe crawl,
+  superseding it once done.
+
+Explicitly on hold: user said "no changes for now" — wait for the Option B
+run to finish before implementing the bucketing fix or starting this.

@@ -8,7 +8,9 @@ it resumes from whatever's `queued` in the SQLite DB.
 
 Recursion rule (see plan.md): every direct citer of an expanded paper is
 recorded as a node/edge, but only citers whose citation was flagged
-`isInfluential` by Semantic Scholar get queued for their own expansion.
+`isInfluential` by Semantic Scholar get queued for their own expansion --
+unless `--ignore-influential` is passed, which queues everything discovered
+("Option B", unrestricted mode; see plan.md for the risk tradeoff).
 Publication-date cutoff: 2026-07-31.
 """
 
@@ -75,7 +77,13 @@ def seed_if_needed(conn, client: api_client.SemanticScholarClient) -> None:
     log.info("Seeded root paper %s (%s)", paper["paperId"], paper.get("title"))
 
 
-def expand_one(conn, client: api_client.SemanticScholarClient, paper_id: str, depth: int) -> int:
+def expand_one(
+    conn,
+    client: api_client.SemanticScholarClient,
+    paper_id: str,
+    depth: int,
+    ignore_influential: bool = False,
+) -> int:
     """Pull the full citer list for one paper. Returns count of new papers added.
 
     If a transient failure (network/429/5xx exhausted its retries) interrupts
@@ -83,6 +91,11 @@ def expand_one(conn, client: api_client.SemanticScholarClient, paper_id: str, de
     kept, but `paper_id` is deliberately left `queued` (not `expanded`) so
     it's picked up and finished on a later pass rather than silently treated
     as fully expanded with partial data.
+
+    `ignore_influential`: when True, every newly-discovered citer is queued
+    for its own expansion regardless of `isInfluential` -- the "Option B"
+    unrestricted mode. `is_influential` is still recorded on the edge either
+    way, this only changes the queuing decision.
     """
     new_count = 0
     interrupted = False
@@ -97,7 +110,7 @@ def expand_one(conn, client: api_client.SemanticScholarClient, paper_id: str, de
                 continue
 
             is_influential = bool(citation.get("isInfluential"))
-            status = "queued" if is_influential else "skipped"
+            status = "queued" if (is_influential or ignore_influential) else "skipped"
             inserted = db.insert_paper_if_new(
                 conn,
                 paper_id=citing["paperId"],
@@ -134,15 +147,18 @@ def checkpoint(db_path: str, output_path: str) -> None:
     log.info("Checkpoint written to %s (%d nodes, %d edges)", output_path, n_nodes, n_edges)
 
 
-def run(db_path: str, checkpoint_hours: float, gexf_output: str) -> None:
+def run(
+    db_path: str, checkpoint_hours: float, gexf_output: str, ignore_influential: bool = False
+) -> None:
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
 
     client = api_client.SemanticScholarClient()
     log.info(
-        "Starting crawler (authenticated=%s, min_interval=%.1fs)",
+        "Starting crawler (authenticated=%s, min_interval=%.1fs, ignore_influential=%s)",
         bool(client.api_key),
         client.min_interval,
+        ignore_influential,
     )
 
     with db.connect(db_path) as conn:
@@ -160,7 +176,9 @@ def run(db_path: str, checkpoint_hours: float, gexf_output: str) -> None:
                 log.info("Frontier exhausted -- crawl complete.")
                 break
             paper_id, depth = batch[0]["paper_id"], batch[0]["depth"]
-            new_count, interrupted = expand_one(conn, client, paper_id, depth)
+            new_count, interrupted = expand_one(
+                conn, client, paper_id, depth, ignore_influential=ignore_influential
+            )
 
             if interrupted:
                 fails = consecutive_failures.get(paper_id, 0) + 1
@@ -204,6 +222,16 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint-hours", type=float, default=6.0)
     parser.add_argument("--gexf-output", default=export_gexf.DEFAULT_OUTPUT)
     parser.add_argument("--log-file", default="logs/crawler.log")
+    parser.add_argument(
+        "--ignore-influential",
+        action="store_true",
+        help=(
+            "Unrestricted mode ('Option B'): queue every newly-discovered "
+            "citer for expansion regardless of isInfluential, not just "
+            "influential ones. Reopens the combinatorial-explosion risk the "
+            "influential filter was added to avoid -- see plan.md."
+        ),
+    )
     args = parser.parse_args()
 
     import os
@@ -215,4 +243,4 @@ if __name__ == "__main__":
         handlers=[logging.FileHandler(args.log_file), logging.StreamHandler()],
     )
 
-    run(args.db, args.checkpoint_hours, args.gexf_output)
+    run(args.db, args.checkpoint_hours, args.gexf_output, ignore_influential=args.ignore_influential)
