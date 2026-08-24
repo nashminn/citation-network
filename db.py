@@ -47,6 +47,10 @@ def connect(db_path: str = DEFAULT_DB_PATH):
     conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA foreign_keys=OFF;")
+    # If something else briefly touches this DB (e.g. a manual sqlite3 CLI
+    # query) while the crawler holds a lock, wait rather than crash with
+    # "database is locked".
+    conn.execute("PRAGMA busy_timeout=30000;")
     try:
         yield conn
     finally:

@@ -143,8 +143,15 @@ def expand_one(
 
 
 def checkpoint(db_path: str, output_path: str) -> None:
-    n_nodes, n_edges = export_gexf.export(db_path, output_path)
-    log.info("Checkpoint written to %s (%d nodes, %d edges)", output_path, n_nodes, n_edges)
+    """A failed checkpoint (disk full, transient IO error, etc.) must not
+    kill an otherwise-healthy multi-hour crawl -- log it and keep going.
+    The DB itself is the source of truth; a missed GEXF export just means
+    stale data in that one file until the next successful checkpoint."""
+    try:
+        n_nodes, n_edges = export_gexf.export(db_path, output_path)
+        log.info("Checkpoint written to %s (%d nodes, %d edges)", output_path, n_nodes, n_edges)
+    except Exception:
+        log.exception("Checkpoint export to %s failed, continuing crawl anyway", output_path)
 
 
 def run(
