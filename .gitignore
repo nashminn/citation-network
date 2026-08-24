@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 logs/*.log
+logs/*.out
 *.db-wal
 *.db-shm
 .env
