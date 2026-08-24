@@ -72,14 +72,30 @@ setx SEMANTIC_SCHOLAR_API_KEY "..."            # persistent, new terminals only
 ## Running
 
 ```bash
+source .venv/bin/activate    # networkx/requests live in the venv, not system python
+source .env                  # loads SEMANTIC_SCHOLAR_API_KEY
 python crawler.py
 ```
 
+Or without activating the venv, in one line each time:
+```bash
+source .env
+.venv/bin/python crawler.py
+```
+
+Plain `python3 crawler.py` (system Python, no venv) will fail with
+`ModuleNotFoundError: No module named 'networkx'` — the venv isn't optional.
+
 - Long-running by design — meant to be started once and left running for
   days, not run interactively to completion.
-- Safe to interrupt: `Ctrl+C` finishes the current paper, checkpoints, and
-  exits cleanly. Re-running `python crawler.py` resumes automatically from
-  whatever's still queued in the DB — no flags needed.
+- **To stop it**: press `Ctrl+C` in the terminal it's running in (or
+  `kill <pid>` if backgrounded via `nohup`). It finishes the paper currently
+  in progress, writes a final GEXF checkpoint, and exits cleanly — wait for
+  the "Checkpoint written" log line before closing the terminal or powering
+  off, rather than killing the process/terminal outright.
+- **To resume**: run the same command again (`source .env && python
+  crawler.py`) — it picks up automatically from whatever's still `queued` in
+  `citation_network.db`. No flags needed.
 - On Linux, background it with `nohup python crawler.py &` or run it in
   `tmux`/`screen`.
 - On Windows there's no direct `nohup` equivalent: either use WSL (closest to
