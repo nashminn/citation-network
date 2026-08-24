@@ -125,6 +125,8 @@ snapshot.
 | `db.py` | SQLite schema (`papers`, `edges`) and data-access helpers |
 | `api_client.py` | Semantic Scholar HTTP client: pacing, retry/backoff, pagination |
 | `export_gexf.py` | SQLite → GEXF export, standalone-runnable |
+| `backfill_fields_of_study.py` | One-off: backfill `fields_of_study` for papers crawled before that field existed |
+| `INSPECTING_DB.md` | How to query/inspect the DB and log while the crawler runs |
 | `.claude/plan.md` | Full design doc: scope decisions, scale estimates, day-by-day plan |
 | `citation_network.db` | Crawl state (git-lfs tracked, not committed until it exists) |
 | `citation_network.gexf` | Latest checkpoint export (git-lfs tracked) |

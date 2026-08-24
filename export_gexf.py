@@ -25,7 +25,7 @@ def export(db_path: str, output_path: str) -> tuple[int, int]:
         for row in conn.execute(
             """
             SELECT paper_id, title, year, authors, venue, citation_count,
-                   reference_count, pub_date, depth, status
+                   reference_count, pub_date, depth, status, fields_of_study
             FROM papers
             """
         ):
@@ -40,8 +40,10 @@ def export(db_path: str, output_path: str) -> tuple[int, int]:
                 pub_date,
                 depth,
                 status,
+                fields_of_study_json,
             ) = row
             authors = ", ".join(json.loads(authors_json or "[]"))
+            fields_of_study = ", ".join(json.loads(fields_of_study_json or "[]"))
             graph.add_node(
                 paper_id,
                 title=title or "",
@@ -53,6 +55,7 @@ def export(db_path: str, output_path: str) -> tuple[int, int]:
                 pub_date=pub_date or "",
                 depth=depth,
                 expanded=(status == "expanded"),
+                fields_of_study=fields_of_study,
             )
 
         for citing_id, cited_id, is_influential in conn.execute(

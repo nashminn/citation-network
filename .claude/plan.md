@@ -84,7 +84,9 @@ scales every day's reach multiplicatively rather than just adding more days.
 - **Datastore**: SQLite, not JSON — needed for potentially large row counts,
   resumability, and crash safety across a multi-day run.
   - `papers` table: paperId (PK), title, year, authors, venue, citationCount,
-    referenceCount, publicationDate, depth, expanded (bool)
+    referenceCount, publicationDate, depth, expanded (bool), fieldsOfStudy
+    (JSON list, added after the initial build + backfilled for the 7,148
+    papers already crawled at that point via `/paper/batch`, ~15 requests)
   - `edges` table: citing_id, cited_id, isInfluential (bool)
 - **Execution model**: standalone long-lived Python process on the user's
   machine (e.g. via `nohup`/`tmux`), not something run inside a single chat
@@ -160,9 +162,32 @@ resume mechanism across machines. Notes for the Windows side:
   off. No flags needed.
 
 ## Open items / what's needed before proceeding
-1. **API key** — still pending (Semantic Scholar quoted a 1–2 week backlog,
-   longer than the crawl deadline). Decision: proceed unauthenticated now
-   rather than block; swap in the key via env var if/when it arrives.
-2. **Confirm before the first real run**: user has asked to hold off on
-   actual API calls until told to proceed.
-3. **Language** — Python, confirmed.
+1. **API key** — obtained (arrived faster than the quoted 1–2 week backlog).
+   Set via `.env`, picked up automatically by `api_client.py`.
+2. **Language** — Python, confirmed.
+
+## Future consideration: relaxing the influential-only filter (not yet decided)
+If the influential-only crawl reaches a natural end (frontier exhausted) in a
+reasonable timeframe, the user is considering a follow-up "risk run" that
+expands into some or all of the currently-`skipped` papers too, for a denser
+graph. Not started — purely a design note for later.
+
+- **Isolation approach (recommended)**: once the current crawl finishes, copy
+  `citation_network.db` → `citation_network_full.db` and rename
+  `citation_network.gexf` → `citation_network_influential_only.gexf` before
+  touching anything further. Run any follow-up crawl against the copy via
+  `crawler.py --db citation_network_full.db --gexf-output
+  citation_network_full.gexf` (both flags already exist). Keeps the finished,
+  safe dataset completely untouched — no shared-column/shared-code-path risk
+  to the good result.
+- **Two different meanings of "ignore the filter", with very different risk**:
+  - *Option A — one-time re-queue*: `UPDATE papers SET status='queued' WHERE
+    status='skipped'` on the copy. Future newly-discovered papers still get
+    filtered by `isInfluential` as before. Bounded, finite extra work.
+  - *Option B — true unrestricted mode*: a new `--ignore-influential` crawler
+    flag that queues everything discovered from that point on, indefinitely.
+    This reopens the original combinatorial-explosion risk the influential
+    filter was specifically added to avoid (see "Scale reality" above) —
+    could mean days/weeks again, not hours.
+  - Leaning toward Option A as the actual "safe risk" if/when this is
+    revisited.

@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS papers (
     reference_count INTEGER,
     pub_date        TEXT,      -- ISO date string, may be NULL
     depth           INTEGER NOT NULL,
-    status          TEXT NOT NULL DEFAULT 'queued'
+    status          TEXT NOT NULL DEFAULT 'queued',
+    fields_of_study TEXT       -- JSON list, e.g. ["Computer Science"]
 );
 
 CREATE TABLE IF NOT EXISTS edges (
@@ -58,6 +59,12 @@ def connect(db_path: str = DEFAULT_DB_PATH):
 
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
+    # Migration for DBs created before fields_of_study existed.
+    try:
+        conn.execute("ALTER TABLE papers ADD COLUMN fields_of_study TEXT")
+    except sqlite3.OperationalError as exc:
+        if "duplicate column" not in str(exc).lower():
+            raise
     conn.commit()
 
 
@@ -78,6 +85,7 @@ def insert_paper_if_new(
     pub_date: str | None,
     depth: int,
     status: str,
+    fields_of_study: list[str] | None = None,
 ) -> bool:
     """Insert a paper only if it doesn't already exist.
 
@@ -89,8 +97,8 @@ def insert_paper_if_new(
         """
         INSERT OR IGNORE INTO papers
             (paper_id, title, year, authors, venue, citation_count,
-             reference_count, pub_date, depth, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             reference_count, pub_date, depth, status, fields_of_study)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             paper_id,
@@ -103,9 +111,21 @@ def insert_paper_if_new(
             pub_date,
             depth,
             status,
+            json.dumps(fields_of_study or []),
         ),
     )
     return cur.rowcount > 0
+
+
+def set_fields_of_study(conn: sqlite3.Connection, paper_id: str, fields_of_study: list[str]) -> None:
+    conn.execute(
+        "UPDATE papers SET fields_of_study = ? WHERE paper_id = ?",
+        (json.dumps(fields_of_study or []), paper_id),
+    )
+
+
+def all_paper_ids(conn: sqlite3.Connection) -> list[str]:
+    return [r[0] for r in conn.execute("SELECT paper_id FROM papers").fetchall()]
 
 
 def add_edge(

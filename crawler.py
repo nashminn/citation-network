@@ -69,6 +69,7 @@ def seed_if_needed(conn, client: api_client.SemanticScholarClient) -> None:
         pub_date=paper.get("publicationDate"),
         depth=0,
         status="queued",
+        fields_of_study=paper.get("fieldsOfStudy"),
     )
     conn.commit()
     log.info("Seeded root paper %s (%s)", paper["paperId"], paper.get("title"))
@@ -109,6 +110,7 @@ def expand_one(conn, client: api_client.SemanticScholarClient, paper_id: str, de
                 pub_date=pub_date,
                 depth=depth + 1,
                 status=status,
+                fields_of_study=citing.get("fieldsOfStudy"),
             )
             db.add_edge(
                 conn, citing_id=citing["paperId"], cited_id=paper_id, is_influential=is_influential
