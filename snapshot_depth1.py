@@ -15,6 +15,7 @@ writing, only reads (for polling) and backs it up (read-only source side).
 
 import argparse
 import logging
+import subprocess
 import sqlite3
 import time
 
@@ -49,6 +50,37 @@ def safe_snapshot(source_db_path: str, dest_db_path: str) -> None:
         dest.close()
 
 
+def git_commit_and_push(files: list[str], commit_message: str) -> bool:
+    """Commit the given (already-safe-on-disk) files and push to origin/main.
+    Logs and returns False on any failure rather than raising -- the local
+    snapshot files are already safely written regardless of whether this
+    step succeeds, so a git/network hiccup here shouldn't look like the
+    snapshot itself failed."""
+    try:
+        add = subprocess.run(["git", "add", *files], capture_output=True, text=True)
+        if add.returncode != 0:
+            log.error("git add failed: %s", add.stdout + add.stderr)
+            return False
+
+        commit = subprocess.run(
+            ["git", "commit", "-m", commit_message], capture_output=True, text=True
+        )
+        if commit.returncode != 0:
+            log.error("git commit failed: %s", commit.stdout + commit.stderr)
+            return False
+        log.info("git commit succeeded")
+
+        push = subprocess.run(["git", "push", "origin", "main"], capture_output=True, text=True)
+        if push.returncode != 0:
+            log.error("git push failed: %s", push.stdout + push.stderr)
+            return False
+        log.info("git push succeeded")
+        return True
+    except Exception:
+        log.exception("git commit/push step failed")
+        return False
+
+
 def run(db_path: str, snapshot_db: str, snapshot_gexf: str, poll_seconds: float) -> None:
     log.info("Watching %s for depth-1 completion (polling every %.0fs)", db_path, poll_seconds)
     while True:
@@ -62,9 +94,20 @@ def run(db_path: str, snapshot_db: str, snapshot_gexf: str, poll_seconds: float)
     safe_snapshot(db_path, snapshot_db)
     n_nodes, n_edges = export_gexf.export(snapshot_db, snapshot_gexf)
     log.info("Snapshot done: %s (%d nodes, %d edges)", snapshot_gexf, n_nodes, n_edges)
+
+    commit_message = (
+        f"feat: add depth-1 complete snapshot ({n_nodes} nodes, {n_edges} edges)\n\n"
+        "Isolated snapshot taken automatically the moment depth-1 finished "
+        "expanding, before depth-2 continued changing the live DB/GEXF further."
+    )
+    pushed = git_commit_and_push([snapshot_db, snapshot_gexf], commit_message)
+
     # Deliberately the only stdout output -- everything else above only went
     # to the log file, so this line is the one real signal that this is done.
-    print(f"DEPTH-1 SNAPSHOT COMPLETE: {snapshot_gexf} ({n_nodes} nodes, {n_edges} edges)")
+    status = "committed + pushed" if pushed else "commit/push FAILED, see log"
+    print(
+        f"DEPTH-1 SNAPSHOT COMPLETE: {snapshot_gexf} ({n_nodes} nodes, {n_edges} edges) -- {status}"
+    )
 
 
 if __name__ == "__main__":
