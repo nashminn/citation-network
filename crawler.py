@@ -30,6 +30,20 @@ ROOT_ARXIV_ID = "arXiv:1706.03762"  # Attention Is All You Need
 CUTOFF_DATE = date(2026, 7, 31)
 MAX_CONSECUTIVE_FAILURES = 5  # give up on a specific paper after this many in a row
 
+# Year-based citation-count floor for whether a paper is worth recursing
+# into, on top of the isInfluential gate. Older papers have had more time
+# to accumulate citations, so need a higher count to prove they're worth
+# expanding; 2026 (the cutoff year) is exempted entirely, since papers
+# published this year haven't had time to be cited yet regardless of true
+# importance. Confirmed against the live queue before adopting: prunes
+# ~62% of what was then queued, vs. 0% for 2026 papers specifically.
+CITATION_THRESHOLD_LOW = 3  # at/after LOW_YEAR
+CITATION_THRESHOLD_HIGH = 50  # at/before HIGH_YEAR
+CITATION_THRESHOLD_LOW_YEAR = 2026
+CITATION_THRESHOLD_HIGH_YEAR = 2017
+CITATION_THRESHOLD_MISSING_YEAR = 15  # fixed, for papers with no year at all
+CITATION_THRESHOLD_EXEMPT_YEAR = 2026  # no threshold at all for this year
+
 _stop_requested = False
 
 
@@ -50,6 +64,18 @@ def _passes_cutoff(pub_date: str | None, year: int | None) -> bool:
         return year <= CUTOFF_DATE.year
     # No date info at all -- don't drop it, we can't tell.
     return True
+
+
+def citation_threshold(year: int | None) -> int:
+    if year is None:
+        return CITATION_THRESHOLD_MISSING_YEAR
+    if year >= CITATION_THRESHOLD_EXEMPT_YEAR:
+        return 0
+    y = max(min(year, CITATION_THRESHOLD_LOW_YEAR), CITATION_THRESHOLD_HIGH_YEAR)
+    frac = (CITATION_THRESHOLD_LOW_YEAR - y) / (
+        CITATION_THRESHOLD_LOW_YEAR - CITATION_THRESHOLD_HIGH_YEAR
+    )
+    return CITATION_THRESHOLD_LOW + (CITATION_THRESHOLD_HIGH - CITATION_THRESHOLD_LOW) * frac
 
 
 def seed_if_needed(conn, client: api_client.SemanticScholarClient) -> None:
@@ -110,7 +136,14 @@ def expand_one(
                 continue
 
             is_influential = bool(citation.get("isInfluential"))
-            status = "queued" if (is_influential or ignore_influential) else "skipped"
+            meets_citation_threshold = (citing.get("citationCount") or 0) >= citation_threshold(
+                year
+            )
+            status = (
+                "queued"
+                if (is_influential or ignore_influential) and meets_citation_threshold
+                else "skipped"
+            )
             inserted = db.insert_paper_if_new(
                 conn,
                 paper_id=citing["paperId"],

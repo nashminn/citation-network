@@ -83,7 +83,14 @@ def git_commit_and_push(files: list[str], commit_message: str) -> bool:
         return False
 
 
-def run(db_path: str, depth: int, snapshot_db: str, snapshot_gexf: str, poll_seconds: float) -> None:
+def run(
+    db_path: str,
+    depth: int,
+    snapshot_db: str,
+    snapshot_gexf: str,
+    poll_seconds: float,
+    note: str | None = None,
+) -> None:
     log.info(
         "Watching %s for depth-%d completion (polling every %.0fs)", db_path, depth, poll_seconds
     )
@@ -104,6 +111,8 @@ def run(db_path: str, depth: int, snapshot_db: str, snapshot_gexf: str, poll_sec
         f"Isolated snapshot taken automatically the moment depth-{depth} finished "
         "expanding, before the next depth continued changing the live DB/GEXF further."
     )
+    if note:
+        commit_message += f"\n\n{note}"
     pushed = git_commit_and_push([snapshot_db, snapshot_gexf], commit_message)
 
     # Deliberately the only stdout output -- everything else above only went
@@ -123,6 +132,9 @@ if __name__ == "__main__":
     parser.add_argument("--snapshot-gexf", default=None)
     parser.add_argument("--poll-seconds", type=float, default=300.0)
     parser.add_argument("--log-file", default=None)
+    parser.add_argument(
+        "--note", default=None, help="Extra paragraph appended to the auto-generated commit message"
+    )
     args = parser.parse_args()
 
     snapshot_db = args.snapshot_db or f"citation_network_v3_depth{args.depth}.db"
@@ -136,4 +148,4 @@ if __name__ == "__main__":
         handlers=[logging.FileHandler(log_file)],  # stdout stays quiet until the final print
     )
 
-    run(args.db, args.depth, snapshot_db, snapshot_gexf, args.poll_seconds)
+    run(args.db, args.depth, snapshot_db, snapshot_gexf, args.poll_seconds, note=args.note)
