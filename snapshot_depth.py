@@ -4,6 +4,12 @@ takes a safe point-in-time snapshot -- DB backup + GEXF export -- commits it,
 and pushes it. Generalization of snapshot_depth1.py (kept as-is, historical)
 for any depth -- e.g. depth-2, depth-3, etc.
 
+Omit --depth entirely to watch for full convergence instead of one layer:
+the crawl stops itself once the *global* queued count hits zero (frontier
+exhausted across every depth, not just one), and this closes the one gap
+in that self-stop -- crawler.py doesn't commit/push its own final state,
+so this does it automatically the moment that happens.
+
 Uses SQLite's online backup API (not a plain file copy), which is safe to
 run concurrently against a WAL-mode DB that's still being actively written
 to by the crawler -- it produces a consistent snapshot regardless of
@@ -25,13 +31,18 @@ import export_gexf
 log = logging.getLogger("snapshot_depth")
 
 
-def depth_remaining(db_path: str, depth: int) -> int:
+def depth_remaining(db_path: str, depth: int | None) -> int:
+    """depth=None means global: every depth, i.e. whether the crawl has
+    converged entirely rather than just finished one layer."""
     conn = sqlite3.connect(db_path)
     try:
         conn.execute("PRAGMA busy_timeout=30000;")
-        row = conn.execute(
-            "SELECT COUNT(*) FROM papers WHERE depth = ? AND status = 'queued'", (depth,)
-        ).fetchone()
+        if depth is None:
+            row = conn.execute("SELECT COUNT(*) FROM papers WHERE status = 'queued'").fetchone()
+        else:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM papers WHERE depth = ? AND status = 'queued'", (depth,)
+            ).fetchone()
         return row[0]
     finally:
         conn.close()
@@ -85,32 +96,40 @@ def git_commit_and_push(files: list[str], commit_message: str) -> bool:
 
 def run(
     db_path: str,
-    depth: int,
+    depth: int | None,
     snapshot_db: str,
     snapshot_gexf: str,
     poll_seconds: float,
     note: str | None = None,
 ) -> None:
-    log.info(
-        "Watching %s for depth-%d completion (polling every %.0fs)", db_path, depth, poll_seconds
-    )
+    label = f"depth-{depth}" if depth is not None else "full convergence"
+    log.info("Watching %s for %s (polling every %.0fs)", db_path, label, poll_seconds)
     while True:
         remaining = depth_remaining(db_path, depth)
-        log.info("%d depth-%d papers still queued", remaining, depth)
+        log.info("%d %s papers still queued", remaining, label)
         if remaining == 0:
             break
         time.sleep(poll_seconds)
 
-    log.info("Depth-%d complete. Snapshotting to %s", depth, snapshot_db)
+    log.info("%s reached. Snapshotting to %s", label.capitalize(), snapshot_db)
     safe_snapshot(db_path, snapshot_db)
     n_nodes, n_edges = export_gexf.export(snapshot_db, snapshot_gexf)
     log.info("Snapshot done: %s (%d nodes, %d edges)", snapshot_gexf, n_nodes, n_edges)
 
-    commit_message = (
-        f"feat: add depth-{depth} complete snapshot ({n_nodes} nodes, {n_edges} edges)\n\n"
-        f"Isolated snapshot taken automatically the moment depth-{depth} finished "
-        "expanding, before the next depth continued changing the live DB/GEXF further."
-    )
+    if depth is not None:
+        commit_message = (
+            f"feat: add depth-{depth} complete snapshot ({n_nodes} nodes, {n_edges} edges)\n\n"
+            f"Isolated snapshot taken automatically the moment depth-{depth} finished "
+            "expanding, before the next depth continued changing the live DB/GEXF further."
+        )
+    else:
+        commit_message = (
+            f"feat: final converged citation network ({n_nodes} nodes, {n_edges} edges)\n\n"
+            "The crawl's frontier is fully exhausted across every depth -- taken and "
+            "pushed automatically the moment the crawler process's own queue hit zero, "
+            "closing the one gap in its self-stop: crawler.py doesn't commit/push its "
+            "own final state on exit."
+        )
     if note:
         commit_message += f"\n\n{note}"
     pushed = git_commit_and_push([snapshot_db, snapshot_gexf], commit_message)
@@ -118,16 +137,21 @@ def run(
     # Deliberately the only stdout output -- everything else above only went
     # to the log file, so this line is the one real signal that this is done.
     status = "committed + pushed" if pushed else "commit/push FAILED, see log"
+    tag = f"DEPTH-{depth}" if depth is not None else "FINAL"
     print(
-        f"DEPTH-{depth} SNAPSHOT COMPLETE: {snapshot_gexf} "
-        f"({n_nodes} nodes, {n_edges} edges) -- {status}"
+        f"{tag} SNAPSHOT COMPLETE: {snapshot_gexf} ({n_nodes} nodes, {n_edges} edges) -- {status}"
     )
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Snapshot the DB once a given depth fully expands")
+    parser = argparse.ArgumentParser(
+        description="Snapshot the DB once a given depth fully expands, or (with no "
+        "--depth) once the whole crawl converges"
+    )
     parser.add_argument("--db", default="citation_network_v3.db")
-    parser.add_argument("--depth", type=int, required=True)
+    parser.add_argument(
+        "--depth", type=int, default=None, help="Omit for full-convergence mode (global queued=0)"
+    )
     parser.add_argument("--snapshot-db", default=None)
     parser.add_argument("--snapshot-gexf", default=None)
     parser.add_argument("--poll-seconds", type=float, default=300.0)
@@ -137,9 +161,10 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    snapshot_db = args.snapshot_db or f"citation_network_v3_depth{args.depth}.db"
-    snapshot_gexf = args.snapshot_gexf or f"citation_network_v3_depth{args.depth}.gexf"
-    log_file = args.log_file or f"logs/snapshot_depth{args.depth}.log"
+    suffix = f"depth{args.depth}" if args.depth is not None else "final"
+    snapshot_db = args.snapshot_db or f"citation_network_v3_{suffix}.db"
+    snapshot_gexf = args.snapshot_gexf or f"citation_network_v3_{suffix}.gexf"
+    log_file = args.log_file or f"logs/snapshot_{suffix}.log"
 
     os.makedirs(os.path.dirname(log_file) or ".", exist_ok=True)
     logging.basicConfig(
