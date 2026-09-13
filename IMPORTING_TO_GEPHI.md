@@ -11,17 +11,17 @@ Don't start with the biggest one. Work up:
 
 | File | Nodes | Edges | Approx. size |
 |---|---|---|---|
-| `citation_network_v3_depth1.gexf` | 643,732 | 1,568,372 | 861 MB |
-| `citation_network_v3_depth2.gexf` | 886,531 | 2,562,527 | 1.27 GB |
-| `citation_network_v3_final.gexf` | 1,020,536 | 3,036,024 | 1.49 GB |
+| `data/gexf/citation_network_v3_depth1.gexf` | 643,732 | 1,568,372 | 861 MB |
+| `data/gexf/citation_network_v3_depth2.gexf` | 886,531 | 2,562,527 | 1.27 GB |
+| `data/gexf/citation_network_v3_final.gexf` | 1,020,536 | 3,036,024 | 1.49 GB |
 
-Start with `citation_network_v3_depth1.gexf`. If that loads and Gephi stays
+Start with `data/gexf/citation_network_v3_depth1.gexf`. If that loads and Gephi stays
 responsive, move up to depth2, then final. If depth1 already struggles, the
 fixes below (mainly the heap size) are what to try before giving up on a
 bigger file — don't jump straight to the 1.49 GB one as your first attempt.
 
-(`citation_network.gexf`, `citation_network_influential_only.gexf`, and
-`citation_network_full.gexf` are much smaller — under 8 MB each, from
+(`data/gexf/citation_network.gexf`, `data/gexf/citation_network_influential_only.gexf`, and
+`data/gexf/citation_network_full.gexf` are much smaller — under 8 MB each, from
 earlier/smaller runs — good for a quick sanity check that Gephi itself is
 working before touching the big files at all.)
 
@@ -102,10 +102,10 @@ Practical approach once the graph is loaded:
 
 ## If it's still too much: generate a smaller file instead of fighting Gephi
 
-If even `citation_network_v3_depth1.gexf` won't cooperate, it's often
+If even `data/gexf/citation_network_v3_depth1.gexf` won't cooperate, it's often
 easier to make a genuinely smaller GEXF file up front than to keep fighting
 memory settings. The project's own `export_gexf.py` reads directly from the
-SQLite DB (`citation_network_v3.db`) and can be pointed at a query that
+SQLite DB (`data/db/citation_network_v3.db`) and can be pointed at a query that
 only pulls a subset — e.g. everything at depth ≤ 1, or everything above a
 citation-count threshold — rather than the whole graph. That's a Python/DB
 change rather than a Gephi setting, so ask if you want a specific filtered
