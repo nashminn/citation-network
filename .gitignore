@@ -6,3 +6,5 @@ logs/*.out
 *.db-wal
 *.db-shm
 .env
+analysis/cache/
+/citation_network_v3.gexf
