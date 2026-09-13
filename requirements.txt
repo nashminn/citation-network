@@ -1,2 +1,8 @@
 requests>=2.31
 networkx>=3.2
+numpy>=2.5
+scipy>=1.18
+pandas>=3.0
+matplotlib>=3.11
+python-igraph>=1.0
+powerlaw>=1.5
