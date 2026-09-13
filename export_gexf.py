@@ -14,7 +14,7 @@ import db
 
 log = logging.getLogger("export_gexf")
 
-DEFAULT_OUTPUT = "citation_network.gexf"
+DEFAULT_OUTPUT = "data/gexf/citation_network.gexf"
 
 
 def export(db_path: str, output_path: str) -> tuple[int, int]:
@@ -72,7 +72,7 @@ def export(db_path: str, output_path: str) -> tuple[int, int]:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    parser = argparse.ArgumentParser(description="Export citation_network.db to GEXF")
+    parser = argparse.ArgumentParser(description="Export the crawl SQLite DB to GEXF")
     parser.add_argument("--db", default=db.DEFAULT_DB_PATH)
     parser.add_argument("--output", default=DEFAULT_OUTPUT)
     args = parser.parse_args()

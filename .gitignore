@@ -9,4 +9,4 @@ logs/*.out
 *.db-shm
 .env
 analysis/cache/
-/citation_network_v3.gexf
+/data/gexf/citation_network_v3.gexf

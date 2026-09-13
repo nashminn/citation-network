@@ -148,7 +148,7 @@ if __name__ == "__main__":
         description="Snapshot the DB once a given depth fully expands, or (with no "
         "--depth) once the whole crawl converges"
     )
-    parser.add_argument("--db", default="citation_network_v3.db")
+    parser.add_argument("--db", default="data/db/citation_network_v3.db")
     parser.add_argument(
         "--depth", type=int, default=None, help="Omit for full-convergence mode (global queued=0)"
     )
@@ -162,8 +162,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     suffix = f"depth{args.depth}" if args.depth is not None else "final"
-    snapshot_db = args.snapshot_db or f"citation_network_v3_{suffix}.db"
-    snapshot_gexf = args.snapshot_gexf or f"citation_network_v3_{suffix}.gexf"
+    snapshot_db = args.snapshot_db or f"data/db/citation_network_v3_{suffix}.db"
+    snapshot_gexf = args.snapshot_gexf or f"data/gexf/citation_network_v3_{suffix}.gexf"
     log_file = args.log_file or f"logs/snapshot_{suffix}.log"
 
     os.makedirs(os.path.dirname(log_file) or ".", exist_ok=True)

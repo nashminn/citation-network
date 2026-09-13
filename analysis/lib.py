@@ -7,7 +7,7 @@ from pathlib import Path
 
 ANALYSIS_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = ANALYSIS_DIR.parent
-DB_PATH = PROJECT_DIR / "citation_network_v3.db"
+DB_PATH = PROJECT_DIR / "data" / "db" / "citation_network_v3.db"
 CACHE_DIR = ANALYSIS_DIR / "cache"
 LOG_DIR = ANALYSIS_DIR / "logs"
 FIGURES_DIR = ANALYSIS_DIR / "figures"

@@ -13,7 +13,7 @@ import json
 import sqlite3
 from contextlib import contextmanager
 
-DEFAULT_DB_PATH = "citation_network.db"
+DEFAULT_DB_PATH = "data/db/citation_network.db"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS papers (

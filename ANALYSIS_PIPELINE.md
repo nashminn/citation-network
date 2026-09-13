@@ -7,7 +7,7 @@ legible visualization at the end — not as the analysis engine.
 
 ## Data on hand
 
-`citation_network_v3.db` (SQLite), matching the "final converged" crawl:
+`data/db/citation_network_v3.db` (SQLite), matching the "final converged" crawl:
 
 - `papers` — 1,020,536 rows: `paper_id`, `title`, `year`, `authors` (JSON),
   `venue`, `citation_count`, `reference_count`, `pub_date`, `depth`,

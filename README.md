@@ -7,7 +7,7 @@ scale estimates, and day-by-day crawl plan.
 
 **Status**: the crawl reached full convergence at **1,020,536 papers /
 3,036,024 edges**, run with `--ignore-influential` against
-`citation_network_v3.db` (git-lfs tracked, committed) and checkpointed along
+`data/db/citation_network_v3.db` (git-lfs tracked, committed) and checkpointed along
 the way at depth 1 (643,732 nodes) and depth 2 (886,531 nodes) via
 `snapshot_depth.py`. This is the dataset behind `ANALYSIS_RESULTS.md` and
 the `analysis/` pipeline (see "Analysis pipeline" below) — if you just want
@@ -15,7 +15,7 @@ to reproduce the analysis/figures, you don't need to re-run the crawl at
 all, since the finished database is already committed.
 
 An earlier, much smaller influential-only run (7,199 papers / 7,224 edges,
-`citation_network.db`) and an isolated `citation_network_full.db` also exist
+`data/db/citation_network.db`) and an isolated `data/db/citation_network_full.db` also exist
 from earlier iterations of this project (see Design summary below for what
 `--ignore-influential` means) — both superseded by the v3 crawl above.
 
@@ -106,13 +106,13 @@ Plain `python3 crawler.py` (system Python, no venv) will fail with
   off, rather than killing the process/terminal outright.
 - **To resume**: run the same command again (`source .env && python
   crawler.py`) — it picks up automatically from whatever's still `queued` in
-  `citation_network.db`. No flags needed.
+  `data/db/citation_network.db`. No flags needed.
 - On Linux, background it with `nohup python crawler.py &` or run it in
   `tmux`/`screen`.
 - On Windows there's no direct `nohup` equivalent: either use WSL (closest to
   this dev environment), or just leave a terminal window open running
   `python crawler.py` (minimizing is fine, closing the window kills it).
-- Checkpoints (a fresh `citation_network.gexf` export) are written
+- Checkpoints (a fresh `data/gexf/citation_network.gexf` export) are written
   automatically every 6 hours by default (`--checkpoint-hours` to change),
   and once more on exit.
 - To export a GEXF snapshot manually at any time, without stopping the
@@ -121,20 +121,20 @@ Plain `python3 crawler.py` (system Python, no venv) will fail with
 ### Reproducing the v3 dataset (the one the analysis pipeline uses)
 
 Plain `python crawler.py` (no flags) targets the small, historical
-`citation_network.db` described in Design summary below — it will **not**
+`data/db/citation_network.db` described in Design summary below — it will **not**
 reproduce the 1,020,536-node dataset the analysis pipeline and
 `ANALYSIS_RESULTS.md` are built on. That dataset was produced with:
 
 ```bash
 source .env
-python crawler.py --db citation_network_v3.db --gexf-output citation_network_v3.gexf --ignore-influential
+python crawler.py --db data/db/citation_network_v3.db --gexf-output data/gexf/citation_network_v3.gexf --ignore-influential
 ```
 
 run alongside a snapshot watcher in a second terminal, which polls the DB
 and takes a checkpoint once the whole crawl converges (queue empties):
 
 ```bash
-python snapshot_depth.py --db citation_network_v3.db --note "full convergence"
+python snapshot_depth.py --db data/db/citation_network_v3.db --note "full convergence"
 ```
 
 (`--depth 1` / `--depth 2` instead of omitting `--depth` is how the
@@ -144,7 +144,7 @@ taken, if you want those too — see `python snapshot_depth.py --help`.)
 This crawl runs for **about a week** of real time due to API rate limits —
 it isn't something you'd casually rerun just to reproduce the analysis. If
 that's your goal, skip straight to "Analysis pipeline" below and use the
-already-committed `citation_network_v3.db`.
+already-committed `data/db/citation_network_v3.db`.
 
 ### Running the unrestricted ("Option B") pass
 
@@ -155,13 +155,13 @@ was added to avoid (could run for days, not ~78 minutes like the influential-
 only crawl did) — see `.claude/plan.md`'s "Future consideration" section for
 the full tradeoff writeup.
 
-It runs against `citation_network_full.db`, a separate file from
-`citation_network.db` — the finished influential-only dataset is never
+It runs against `data/db/citation_network_full.db`, a separate file from
+`data/db/citation_network.db` — the finished influential-only dataset is never
 touched by this, regardless of how the unrestricted run goes:
 
 ```bash
 source .env
-python crawler.py --db citation_network_full.db --gexf-output citation_network_full.gexf --ignore-influential
+python crawler.py --db data/db/citation_network_full.db --gexf-output data/gexf/citation_network_full.gexf --ignore-influential
 ```
 
 Same stop/resume/checkpoint behavior as the normal run — just pointed at the
@@ -169,7 +169,7 @@ different DB/output files, with the flag set.
 
 ## Analysis pipeline
 
-Once `citation_network_v3.db` is populated — either by pulling it via Git
+Once `data/db/citation_network_v3.db` is populated — either by pulling it via Git
 LFS (the finished database is already committed, see Git LFS setup above)
 or by running the crawl yourself (previous section) — the `analysis/`
 folder reproduces every number, figure, and table in
@@ -212,13 +212,13 @@ panel), color by the `community` or `dominant_field` node attribute
 then export from the Preview tab. `analysis/both.png` is a finished example
 of this for `filtered_subgraph.gexf`; `analysis/figures/field_focused_subgraph.png`
 is a (non-Gephi) equivalent for the other. If you instead want to open the
-full `citation_network_v3.gexf` directly in Gephi, see
+full `data/gexf/citation_network_v3.gexf` directly in Gephi, see
 `IMPORTING_TO_GEPHI.md` first — it's not a casual open without a lot of RAM,
 which is exactly why this pipeline exists.
 
 ## Committing / syncing across machines
 
-The SQLite DB (`citation_network.db` / `citation_network_v3.db`, depending
+The SQLite DB (`data/db/citation_network.db` / `data/db/citation_network_v3.db`, depending
 on which crawl you're running) is that crawl's entire state — `git pull` +
 rerun is how you resume on a different machine.
 
@@ -228,6 +228,12 @@ for the "Checkpoint written" log line confirming clean shutdown), *then*
 snapshot.
 
 ## Files
+
+All SQLite databases live under `data/db/`, all GEXF exports under
+`data/gexf/` — grouped by file type rather than scattered at the repo root.
+Every script's `--db`/`--output`/`--snapshot-db`/`--snapshot-gexf` default
+already points into the right one of these two folders, so the commands
+elsewhere in this README work as shown without extra flags.
 
 | File | Purpose |
 |---|---|
@@ -241,12 +247,12 @@ snapshot.
 | `INSPECTING_DB.md` | How to query/inspect the DB and log while the crawler runs |
 | `IMPORTING_TO_GEPHI.md` | Troubleshooting large-GEXF imports directly into Gephi (memory limits, which file to try first) |
 | `.claude/plan.md` | Full design doc: scope decisions, scale estimates, day-by-day plan |
-| `citation_network_v3.db` | **The dataset used throughout `analysis/` and `ANALYSIS_RESULTS.md`**: the final converged crawl, 1,020,536 papers / 3,036,024 edges (git-lfs tracked) |
-| `citation_network.db` | Finished influential-only crawl state from an earlier, smaller run (git-lfs tracked) |
-| `citation_network_influential_only.gexf` | Finished influential-only export (git-lfs tracked) |
-| `citation_network_full.db` | Isolated copy for the unrestricted ("Option B") pass (git-lfs tracked) |
-| `citation_network_full.gexf` | Unrestricted pass's checkpoint export, once that run produces one |
-| `citation_network_v3.gexf` | Full GEXF export of `citation_network_v3.db` — **not committed** (1.4GB); regenerate with `export_gexf.py --db citation_network_v3.db --output citation_network_v3.gexf` |
+| `data/db/citation_network_v3.db` | **The dataset used throughout `analysis/` and `ANALYSIS_RESULTS.md`**: the final converged crawl, 1,020,536 papers / 3,036,024 edges (git-lfs tracked) |
+| `data/db/citation_network.db` | Finished influential-only crawl state from an earlier, smaller run (git-lfs tracked) |
+| `data/gexf/citation_network_influential_only.gexf` | Finished influential-only export (git-lfs tracked) |
+| `data/db/citation_network_full.db` | Isolated copy for the unrestricted ("Option B") pass (git-lfs tracked) |
+| `data/gexf/citation_network_full.gexf` | Unrestricted pass's checkpoint export, once that run produces one |
+| `data/gexf/citation_network_v3.gexf` | Full GEXF export of `data/db/citation_network_v3.db` — **not committed** (1.4GB); regenerate with `export_gexf.py --db data/db/citation_network_v3.db --output data/gexf/citation_network_v3.gexf` |
 | `ANALYSIS_PIPELINE.md` | Design doc for the `analysis/` pipeline — maps each stage to a chapter of Barabási's *Network Science* |
 | `ANALYSIS_RESULTS.md` | Logged, stage-by-stage results from the analysis pipeline (see "Analysis pipeline" above) |
 | `analysis/lib.py`, `analysis/stage0..stage9_*.py` | The analysis pipeline itself — see "Analysis pipeline" above |

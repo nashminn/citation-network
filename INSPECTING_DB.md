@@ -1,6 +1,6 @@
 # Inspecting the crawl DB
 
-`citation_network.db` is safe to read at any time while the crawler is
+`data/db/citation_network.db` is safe to read at any time while the crawler is
 running — it's in SQLite WAL mode, which supports concurrent readers without
 disturbing the writer.
 
@@ -11,7 +11,7 @@ Using the project's own `db.py` helper (from the project root, with the venv):
 ```bash
 .venv/bin/python -c "
 import db
-with db.connect('citation_network.db') as conn:
+with db.connect('data/db/citation_network.db') as conn:
     print(db.stats(conn))
 "
 ```
@@ -34,7 +34,7 @@ Returns something like:
 
 ```bash
 sudo apt install sqlite3   # not installed by default on this machine
-sqlite3 citation_network.db
+sqlite3 data/db/citation_network.db
 ```
 
 Useful queries once inside the `sqlite3` shell:
@@ -53,7 +53,7 @@ SELECT title, citation_count FROM papers ORDER BY citation_count DESC LIMIT 20;
 .exit
 ```
 ```bash
-du -h citation_network.db
+du -h data/db/citation_network.db
 ```
 
 ## Watching the crawler live (without touching the DB)
@@ -66,7 +66,7 @@ tail -f logs/crawler.log
 ## Checking progress without a query
 
 Every checkpoint (every 6h by default, plus on clean exit) overwrites
-`citation_network.gexf` — you can open that in Gephi at any time to see a
+`data/gexf/citation_network.gexf` — you can open that in Gephi at any time to see a
 visual snapshot of progress, without needing to touch the database directly.
 
 ## A note on rate limiting

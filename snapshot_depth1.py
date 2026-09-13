@@ -112,9 +112,9 @@ def run(db_path: str, snapshot_db: str, snapshot_gexf: str, poll_seconds: float)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Snapshot the DB once depth-1 fully expands")
-    parser.add_argument("--db", default="citation_network_v3.db")
-    parser.add_argument("--snapshot-db", default="citation_network_v3_depth1.db")
-    parser.add_argument("--snapshot-gexf", default="citation_network_v3_depth1.gexf")
+    parser.add_argument("--db", default="data/db/citation_network_v3.db")
+    parser.add_argument("--snapshot-db", default="data/db/citation_network_v3_depth1.db")
+    parser.add_argument("--snapshot-gexf", default="data/gexf/citation_network_v3_depth1.gexf")
     parser.add_argument("--poll-seconds", type=float, default=300.0)
     parser.add_argument("--log-file", default="logs/snapshot_depth1.log")
     args = parser.parse_args()
